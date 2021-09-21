@@ -1,0 +1,55 @@
+.program dht
+
+; loop_until_start_signal_done
+.define public start_signal_clocks_per_loop      1
+; pulse_loop
+.define public pulse_measurement_clocks_per_loop 2
+
+; pindirs is preinitialized with 1 (output enabled)
+; Y is preinitialized with start-signal duration
+; OSR is preinitialized with long-pulse threshold
+
+loop_until_start_signal_done:
+    jmp y-- loop_until_start_signal_done
+    ; back to hi-z, DHT sensor will drive the signal
+    set pindirs 0
+
+; Note: After changing pindir, a 0.1 us delay may be needed before
+; reading the pin. This isn't a concern with the PIO running at 1MHz.
+
+    ; wait until DHT sensor is ready
+loop_until_ready_lo:
+    jmp pin loop_until_ready_lo
+
+loop_until_ready_hi:
+    jmp pin loop_until_lo
+    jmp loop_until_ready_hi
+
+    ; process DHT payload
+loop_until_lo:
+    jmp pin loop_until_lo
+
+loop_until_hi:
+    jmp pin pulse_loop_init
+    jmp loop_until_hi
+    
+    ; measure pulse duration
+pulse_loop_init:
+    ; reset counter
+    mov y, osr
+pulse_loop:
+    jmp pin pulse_tick
+    jmp short_pulse_detected
+pulse_tick:
+    jmp y-- pulse_loop
+    ; counter has reached zero, long pulse detected
+    ; shift in 1 bit
+    set x, 1
+    in x, 1
+    jmp loop_until_lo
+
+short_pulse_detected:
+    ; pin was driven low, short pulse detected
+    ; shift in 0 bit
+    in null, 1
+    jmp loop_until_hi
